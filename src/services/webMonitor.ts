@@ -1,5 +1,6 @@
 import * as cheerio from 'cheerio';
 import crypto from 'crypto';
+import * as diff from 'diff';
 import type { WatchTarget, PageSnapshot, ChangeRecord, AIAnalysisResult } from '@/types';
 
 export class WebMonitorService {
@@ -43,7 +44,8 @@ export class WebMonitorService {
       
       if (selector) {
         // Monitor specific element
-        content = $(selector).text().trim();
+        const selected = $(selector);
+        content = selected.length > 0 ? selected.text().trim() : '';
       } else {
         // Monitor main content
         const mainContent = $('main, article, .content, .main, #content, #main').first();
@@ -52,8 +54,9 @@ export class WebMonitorService {
           : $('body').text().trim();
       }
       
-      // Clean up whitespace
-      content = content.replace(/\s+/g, ' ').trim();
+      // Clean up whitespace: replace multiple spaces/newlines with single space
+      // but keep some structure by replacing multiple newlines with a single newline
+      content = content.replace(/[ \t]+/g, ' ').replace(/\n\s*\n/g, '\n').trim();
       
       const title = $('title').text().trim() || '';
       
@@ -81,27 +84,39 @@ export class WebMonitorService {
   detectChanges(previous: PageSnapshot, current: PageSnapshot): {
     hasChanged: boolean;
     changeType: 'content' | 'structure' | 'both';
-    diffText: string;
+    diffHtml: string;
   } {
     if (previous.contentHash === current.contentHash) {
-      return { hasChanged: false, changeType: 'content', diffText: '' };
+      return { hasChanged: false, changeType: 'content', diffHtml: '' };
     }
     
-    const prevWords = new Set(previous.content.split(' '));
-    const currWords = new Set(current.content.split(' '));
+    // Generate line-by-line diff
+    const diffs = diff.diffLines(previous.content, current.content);
     
-    const added = [...currWords].filter(w => !prevWords.has(w));
-    const removed = [...prevWords].filter(w => !currWords.has(w));
-    
-    const diffText = [
-      added.length > 0 ? `+Added: ${added.slice(0, 50).join(' ')}...` : '',
-      removed.length > 0 ? `-Removed: ${removed.slice(0, 50).join(' ')}...` : '',
-    ].filter(Boolean).join('\n');
+    // Convert to a simple HTML-ready format (or just raw diff data)
+    let diffHtml = '';
+    diffs.forEach((part) => {
+      const colorClass = part.added ? 'bg-green-100 text-green-800' : 
+                         part.removed ? 'bg-red-100 text-red-800 line-through' : '';
+      const prefix = part.added ? '+ ' : part.removed ? '- ' : '  ';
+      
+      if (part.added || part.removed || diffs.length < 10) {
+        // Escape HTML
+        const escapedValue = part.value
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;');
+          
+        diffHtml += `<div class="${colorClass}">${prefix}${escapedValue}</div>`;
+      }
+    });
     
     return {
       hasChanged: true,
       changeType: 'content',
-      diffText,
+      diffHtml,
     };
   }
   
@@ -118,23 +133,28 @@ export class WebMonitorService {
     const currLength = currentContent.length;
     const lengthChange = Math.abs(currLength - prevLength) / Math.max(prevLength, 1);
     
+    // Use diff to get actual word changes
+    const diffs = diff.diffWords(previousContent, currentContent);
+    const addedWords = diffs.filter(d => d.added).length;
+    const removedWords = diffs.filter(d => d.removed).length;
+    
     // Simple heuristic for significance
-    const isSignificant = lengthChange > 0.1; // More than 10% change
+    const isSignificant = addedWords > 10 || removedWords > 10 || lengthChange > 0.1;
     
     // Determine importance based on change magnitude
     let importance: 'low' | 'medium' | 'high';
-    if (lengthChange > 0.5) {
+    if (addedWords > 100 || lengthChange > 0.5) {
       importance = 'high';
-    } else if (lengthChange > 0.2) {
+    } else if (addedWords > 20 || lengthChange > 0.2) {
       importance = 'medium';
     } else {
       importance = 'low';
     }
     
-    // Generate summary (in production, use AI API)
+    // Generate summary
     const summary = isSignificant
-      ? `检测到 ${targetName} 有显著变化，内容变化约 ${Math.round(lengthChange * 100)}%`
-      : `${targetName} 有轻微更新，可能是广告或时间戳变化`;
+      ? `检测到 ${targetName} 有变化：增加了 ${addedWords} 个词，删除了 ${removedWords} 个词。`
+      : `${targetName} 有轻微更新，内容基本保持不变。`;
     
     return {
       isSignificant,

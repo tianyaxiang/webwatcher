@@ -122,7 +122,7 @@ export async function POST(
     let changeRecord = null;
     
     if (previousSnapshot) {
-      const { hasChanged, changeType, diffText } = webMonitorService.detectChanges(
+      const { hasChanged, changeType, diffHtml } = webMonitorService.detectChanges(
         previousSnapshot,
         currentSnapshot
       );
@@ -145,7 +145,7 @@ export async function POST(
           detectedAt: new Date().toISOString(),
           changeType,
           changeSummary: analysis.summary,
-          diffHtml: diffText,
+          diffHtml: diffHtml,
           importance: analysis.importance,
           notified: false,
         };
