@@ -110,6 +110,52 @@ export class StorageService {
     } catch (error) {
       console.error('Failed to update latest snapshot index:', error);
     }
+    
+    // Also update snapshot history index
+    await this.addToSnapshotIndex(targetId, snapshotId);
+  }
+  
+  private async addToSnapshotIndex(targetId: string, snapshotId: string): Promise<void> {
+    const indexPath = this.getFilePath('snapshots-index.json');
+    let index: { id: string; targetId: string; capturedAt: string }[] = [];
+    
+    try {
+      const data = await fs.readFile(indexPath, 'utf-8');
+      index = JSON.parse(data);
+    } catch {
+      // File doesn't exist yet
+    }
+    
+    index.unshift({
+      id: snapshotId,
+      targetId,
+      capturedAt: new Date().toISOString(),
+    });
+    
+    // Keep last 5000 snapshots in index
+    index = index.slice(0, 5000);
+    
+    await fs.writeFile(indexPath, JSON.stringify(index, null, 2));
+  }
+  
+  async getSnapshotsForTarget(targetId: string, limit: number = 50): Promise<PageSnapshot[]> {
+    try {
+      const indexPath = this.getFilePath('snapshots-index.json');
+      const data = await fs.readFile(indexPath, 'utf-8');
+      const index = JSON.parse(data)
+        .filter((item: any) => item.targetId === targetId)
+        .slice(0, limit);
+      
+      const snapshots: PageSnapshot[] = [];
+      for (const item of index) {
+        const snapshot = await this.getSnapshot(item.id);
+        if (snapshot) snapshots.push(snapshot);
+      }
+      
+      return snapshots;
+    } catch (error) {
+      return [];
+    }
   }
   
   async getLatestSnapshot(targetId: string): Promise<PageSnapshot | null> {

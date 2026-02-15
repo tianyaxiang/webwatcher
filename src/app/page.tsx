@@ -1,8 +1,21 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, RefreshCw, Eye, Trash2, Clock, AlertTriangle, CheckCircle, ExternalLink, Play, Square, Zap, X, ChevronRight } from 'lucide-react';
+import { Plus, RefreshCw, Eye, Trash2, Clock, AlertTriangle, CheckCircle, ExternalLink, Play, Square, Zap, X, ChevronRight, History } from 'lucide-react';
 import type { WatchTarget, ChangeRecord, MonitorStats, SchedulerStatus } from '@/types';
+
+interface SnapshotSummary {
+  id: string;
+  targetId: string;
+  contentHash: string;
+  contentLength: number;
+  capturedAt: string;
+  metadata: {
+    title?: string;
+    statusCode: number;
+    responseTime: number;
+  };
+}
 
 export default function Home() {
   const [targets, setTargets] = useState<WatchTarget[]>([]);
@@ -14,6 +27,11 @@ export default function Home() {
   const [checkingId, setCheckingId] = useState<string | null>(null);
   const [schedulerLoading, setSchedulerLoading] = useState(false);
   const [selectedChange, setSelectedChange] = useState<(ChangeRecord & { target?: WatchTarget }) | null>(null);
+  const [snapshotTarget, setSnapshotTarget] = useState<WatchTarget | null>(null);
+  const [snapshots, setSnapshots] = useState<SnapshotSummary[]>([]);
+  const [snapshotsLoading, setSnapshotsLoading] = useState(false);
+  const [snapshotContent, setSnapshotContent] = useState<string | null>(null);
+  const [snapshotContentId, setSnapshotContentId] = useState<string | null>(null);
   
   // Form state
   const [newUrl, setNewUrl] = useState('');
@@ -124,6 +142,37 @@ export default function Home() {
       await loadData();
     } catch (error) {
       console.error('Failed to toggle target:', error);
+    }
+  };
+  
+  const openSnapshots = async (target: WatchTarget) => {
+    setSnapshotTarget(target);
+    setSnapshots([]);
+    setSnapshotContent(null);
+    setSnapshotContentId(null);
+    setSnapshotsLoading(true);
+    try {
+      const res = await fetch(`/api/snapshots?targetId=${target.id}&limit=50`);
+      setSnapshots(await res.json());
+    } catch (error) {
+      console.error('Failed to load snapshots:', error);
+    }
+    setSnapshotsLoading(false);
+  };
+  
+  const viewSnapshotContent = async (snapshotId: string) => {
+    if (snapshotContentId === snapshotId) {
+      setSnapshotContent(null);
+      setSnapshotContentId(null);
+      return;
+    }
+    try {
+      const res = await fetch(`/api/snapshots/${snapshotId}`);
+      const data = await res.json();
+      setSnapshotContent(data.content);
+      setSnapshotContentId(snapshotId);
+    } catch (error) {
+      console.error('Failed to load snapshot content:', error);
     }
   };
   
@@ -313,6 +362,13 @@ export default function Home() {
                             {target.enabled ? <AlertTriangle className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
                           </button>
                           <button
+                            onClick={() => openSnapshots(target)}
+                            className="p-2 hover:bg-purple-100 text-purple-500 rounded-lg transition"
+                            title="快照历史"
+                          >
+                            <History className="w-4 h-4" />
+                          </button>
+                          <button
                             onClick={() => deleteTarget(target.id)}
                             className="p-2 hover:bg-red-100 text-red-500 rounded-lg transition"
                             title="删除"
@@ -451,6 +507,87 @@ export default function Home() {
                   </a>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Snapshot History Panel */}
+      {snapshotTarget && (
+        <div className="fixed inset-0 bg-black/50 flex justify-end z-50">
+          <div className="bg-white w-full max-w-2xl h-full flex flex-col shadow-2xl">
+            <div className="p-4 border-b flex items-center justify-between bg-gray-50">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                  <History className="w-5 h-5 text-purple-500" />
+                  快照历史
+                </h2>
+                <p className="text-sm text-gray-500">{snapshotTarget.name}</p>
+              </div>
+              <button 
+                onClick={() => { setSnapshotTarget(null); setSnapshotContent(null); setSnapshotContentId(null); }}
+                className="p-2 hover:bg-gray-200 rounded-full transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto">
+              {snapshotsLoading ? (
+                <div className="p-8 text-center text-gray-500">加载中...</div>
+              ) : snapshots.length === 0 ? (
+                <div className="p-8 text-center text-gray-500">
+                  <History className="w-12 h-12 mx-auto mb-2 opacity-30" />
+                  <p>暂无快照记录</p>
+                  <p className="text-xs mt-1">执行一次检查后会生成快照</p>
+                </div>
+              ) : (
+                <div className="divide-y">
+                  {snapshots.map((snap, idx) => (
+                    <div key={snap.id}>
+                      <div 
+                        className={`p-4 hover:bg-gray-50 transition cursor-pointer ${snapshotContentId === snap.id ? 'bg-purple-50' : ''}`}
+                        onClick={() => viewSnapshotContent(snap.id)}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center text-xs font-bold">
+                              {idx + 1}
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-gray-900">
+                                {formatTime(snap.capturedAt)}
+                              </p>
+                              <div className="flex items-center gap-3 text-xs text-gray-500 mt-0.5">
+                                <span>状态码: {snap.metadata.statusCode}</span>
+                                <span>响应: {snap.metadata.responseTime}ms</span>
+                                <span>内容: {(snap.contentLength / 1024).toFixed(1)}KB</span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-mono text-gray-400">{snap.contentHash.slice(0, 8)}</span>
+                            <ChevronRight className={`w-4 h-4 text-gray-300 transition ${snapshotContentId === snap.id ? 'rotate-90' : ''}`} />
+                          </div>
+                        </div>
+                      </div>
+                      {snapshotContentId === snap.id && snapshotContent !== null && (
+                        <div className="px-4 pb-4">
+                          <div className="bg-gray-900 rounded-lg overflow-hidden">
+                            <div className="bg-gray-800 px-4 py-2 border-b border-gray-700 flex justify-between">
+                              <span className="text-gray-400 text-xs">快照内容</span>
+                              <span className="text-gray-500 text-xs">{snap.metadata.title}</span>
+                            </div>
+                            <pre className="p-4 text-xs text-gray-300 overflow-x-auto max-h-80 whitespace-pre-wrap break-words">
+                              {snapshotContent}
+                            </pre>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>

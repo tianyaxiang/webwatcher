@@ -1,3 +1,10 @@
+export type RenderMode = 'static' | 'browser';
+
+export interface ProxyConfig {
+  url: string;       // e.g. http://user:pass@host:port or socks5://host:port
+  label?: string;    // friendly name
+}
+
 export interface WatchTarget {
   id: string;
   url: string;
@@ -8,11 +15,31 @@ export interface WatchTarget {
   createdAt: string;
   lastCheckedAt?: string;
   lastChangedAt?: string;
+  // Render mode
+  renderMode?: RenderMode;    // 'static' (default) or 'browser' (Playwright)
+  waitForSelector?: string;   // Wait for this selector before capturing (browser mode)
+  // Proxy
+  proxy?: string;             // proxy URL or pool name
+  // Template
+  templateId?: string;        // ID of the template used to create this target
   // Notification options
   notifyEmail?: string;
   notifyWebhook?: string;
   notifyTelegram?: string;
   notifyDiscord?: string;
+}
+
+export interface MonitorTemplate {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  url: string;
+  selector?: string;
+  renderMode?: RenderMode;
+  waitForSelector?: string;
+  checkInterval: CheckInterval;
+  icon?: string;              // emoji
 }
 
 export interface SchedulerStatus {
