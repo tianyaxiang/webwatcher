@@ -1,0 +1,39 @@
+services:
+  webwatcher:
+    build: .
+    container_name: webwatcher
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - webwatcher-data:/app/data
+    environment:
+      - NODE_ENV=production
+      - DATA_DIR=/app/data
+      # Auth (required for production)
+      - ADMIN_PASSWORD=changeme
+      # Email notifications (optional)
+      # - SMTP_HOST=smtp.example.com
+      # - SMTP_PORT=587
+      # - SMTP_USER=your-email@example.com
+      # - SMTP_PASS=your-password
+      # - SMTP_FROM=noreply@example.com
+      # Feishu (optional)
+      # - FEISHU_WEBHOOK_URL=https://open.feishu.cn/open-apis/bot/v2/hook/xxx
+      # WeCom (optional)
+      # - WECOM_WEBHOOK_URL=https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx
+      # Server酱 (optional)
+      # - SERVERCHAN_KEY=SCTxxx
+      # Telegram (optional)
+      # - TELEGRAM_BOT_TOKEN=your-bot-token
+      # Proxy pool (optional)
+      # - PROXY_URLS=http://user:pass@host1:port,socks5://host2:port
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  webwatcher-data:
