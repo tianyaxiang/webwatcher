@@ -134,8 +134,8 @@ export async function browserFetchPage(
  * Check if Playwright is available
  */
 export async function isBrowserAvailable(): Promise<boolean> {
+  try {
     // @ts-ignore - playwright is an optional peer dependency
-    await import('playwright');
     await import('playwright');
     return true;
   } catch {
