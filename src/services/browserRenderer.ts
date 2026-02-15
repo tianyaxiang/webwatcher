@@ -1,120 +1,144 @@
 /**
- * Browser Renderer Service - Uses Playwright for JavaScript-rendered (SPA) pages.
+ * Browser Renderer Service - Uses Playwright for JavaScript-rendered pages (SPA).
  * Falls back gracefully if Playwright is not installed.
  */
 
-let playwright: typeof import('playwright') | null = null;
-let browserInstance: import('playwright').Browser | null = null;
+import * as cheerio from 'cheerio';
 
-async function getPlaywright() {
-  if (playwright) return playwright;
-  try {
-    playwright = await import('playwright');
-    return playwright;
-  } catch {
-    return null;
+let playwright: any = null;
+let browser: any = null;
+
+async function ensureBrowser(proxyUrl?: string): Promise<any> {
+  if (!playwright) {
+    try {
+      // @ts-ignore - playwright is an optional peer dependency
+      playwright = await import('playwright');
+    } catch {
+      throw new Error(
+        'Playwright is not installed. Run: pnpm add playwright && npx playwright install chromium'
+      );
+    }
+  }
+
+  // Re-create browser if proxy changes or browser is closed
+  if (browser && browser.isConnected()) {
+    return browser;
+  }
+
+  const launchOptions: any = {
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+  };
+
+  if (proxyUrl) {
+    launchOptions.proxy = { server: proxyUrl };
+  }
+
+  browser = await playwright.chromium.launch(launchOptions);
+  return browser;
+}
+
+/**
+ * Close the browser instance (call on shutdown)
+ */
+export async function closeBrowser(): Promise<void> {
+  if (browser) {
+    await browser.close().catch(() => {});
+    browser = null;
   }
 }
 
-async function getBrowser() {
-  if (browserInstance?.isConnected()) return browserInstance;
-
-  const pw = await getPlaywright();
-  if (!pw) throw new Error('Playwright is not installed. Run: pnpm add playwright && npx playwright install chromium');
-
-  browserInstance = await pw.chromium.launch({
-    headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-  });
-  return browserInstance;
-}
-
-export interface BrowserFetchOptions {
-  url: string;
-  selector?: string;
-  waitForSelector?: string;
-  proxy?: string;
-  timeoutMs?: number;
-}
-
-export interface BrowserFetchResult {
+/**
+ * Fetch a page using Playwright (headless browser)
+ */
+export async function browserFetchPage(
+  options: {
+    url: string;
+    selector?: string;
+    waitForSelector?: string;
+    proxy?: string;
+    timeoutMs?: number;
+  }
+): Promise<{
   content: string;
   title: string;
   statusCode: number;
   responseTime: number;
-}
-
-export async function browserFetchPage(opts: BrowserFetchOptions): Promise<BrowserFetchResult> {
+}> {
+  const { url, selector, waitForSelector, proxy, timeoutMs = 30000 } = options;
   const startTime = Date.now();
-  const timeout = opts.timeoutMs ?? 30000;
 
-  const browser = await getBrowser();
+  const b = await ensureBrowser(proxy);
+  const context = await b.newContext({
+    userAgent:
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    locale: 'zh-CN',
+    timezoneId: 'Asia/Shanghai',
+  });
 
-  const contextOpts: Record<string, unknown> = {
-    userAgent: 'WebWatcher/1.0 (https://webwatcher.dev)',
-  };
-  if (opts.proxy) {
-    contextOpts.proxy = { server: opts.proxy };
-  }
-
-  const context = await browser.newContext(contextOpts);
   const page = await context.newPage();
+  let statusCode = 0;
 
-  let statusCode = 200;
+  page.on('response', (resp: any) => {
+    if (resp.url() === url || resp.url() === url + '/') {
+      statusCode = resp.status();
+    }
+  });
 
   try {
-    const response = await page.goto(opts.url, {
-      waitUntil: 'networkidle',
-      timeout,
-    });
-    statusCode = response?.status() ?? 200;
+    await page.goto(url, { waitUntil: 'networkidle', timeout: timeoutMs });
 
-    // Optionally wait for a specific selector
-    if (opts.waitForSelector) {
-      await page.waitForSelector(opts.waitForSelector, { timeout: 10000 }).catch(() => {
-        console.warn(`[BrowserRenderer] waitForSelector "${opts.waitForSelector}" timed out`);
+    // Wait for a specific selector if provided
+    if (waitForSelector) {
+      await page.waitForSelector(waitForSelector, { timeout: 10000 }).catch(() => {
+        console.warn(`[BrowserRenderer] waitForSelector "${waitForSelector}" timed out`);
       });
     }
 
-    // Remove noise elements
-    await page.evaluate(() => {
-      const selectors = ['script', 'style', 'noscript', 'iframe', '[class*="ad"]', '[class*="advertisement"]', '[id*="ad"]'];
-      selectors.forEach(sel => {
-        document.querySelectorAll(sel).forEach(el => el.remove());
-      });
-    });
+    // Small delay for any remaining JS execution
+    await page.waitForTimeout(1000);
+
+    const html = await page.content();
+    const title = await page.title();
+    const responseTime = Date.now() - startTime;
+
+    // Parse with cheerio same as static mode
+    const $ = cheerio.load(html);
+    $('script').remove();
+    $('style').remove();
+    $('noscript').remove();
+    $('iframe').remove();
+    $('[class*="ad"]').remove();
+    $('[class*="advertisement"]').remove();
 
     let content: string;
-
-    if (opts.selector) {
-      content = await page.$eval(opts.selector, el => el.textContent || '').catch(() => '');
+    if (selector) {
+      const selected = $(selector);
+      content = selected.length > 0 ? selected.text().trim() : '';
     } else {
-      content = await page.evaluate(() => {
-        const main = document.querySelector('main, article, .content, .main, #content, #main');
-        return (main || document.body)?.textContent || '';
-      });
+      const mainContent = $('main, article, .content, .main, #content, #main').first();
+      content = mainContent.length > 0
+        ? mainContent.text().trim()
+        : $('body').text().trim();
     }
 
     content = content.replace(/[ \t]+/g, ' ').replace(/\n\s*\n/g, '\n').trim();
 
-    const title = await page.title();
-    const responseTime = Date.now() - startTime;
-
-    return { content, title, statusCode, responseTime };
+    return { content, title, statusCode: statusCode || 200, responseTime };
   } finally {
-    await page.close();
-    await context.close();
+    await context.close().catch(() => {});
   }
 }
 
+/**
+ * Check if Playwright is available
+ */
 export async function isBrowserAvailable(): Promise<boolean> {
-  const pw = await getPlaywright();
-  return pw !== null;
-}
-
-export async function closeBrowser(): Promise<void> {
-  if (browserInstance) {
-    await browserInstance.close();
-    browserInstance = null;
+    // @ts-ignore - playwright is an optional peer dependency
+    await import('playwright');
+    await import('playwright');
+    return true;
+  } catch {
+    return false;
   }
 }

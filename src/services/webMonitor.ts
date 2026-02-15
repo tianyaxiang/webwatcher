@@ -1,13 +1,61 @@
 import * as cheerio from 'cheerio';
 import crypto from 'crypto';
 import * as diff from 'diff';
-import type { WatchTarget, PageSnapshot, ChangeRecord, AIAnalysisResult } from '@/types';
+import type { WatchTarget, PageSnapshot, ChangeRecord, AIAnalysisResult, RenderMode } from '@/types';
+import { browserFetchPage, isBrowserAvailable } from './browserRenderer';
+import { proxyPoolService } from './proxyPool';
+
+export interface FetchPageOptions {
+  url: string;
+  selector?: string;
+  renderMode?: RenderMode;
+  waitForSelector?: string;
+  proxy?: string;
+}
 
 export class WebMonitorService {
   /**
-   * Fetch and parse a web page
+   * Fetch and parse a web page (auto-selects static or browser mode)
    */
-  async fetchPage(url: string, selector?: string): Promise<{
+  async fetchPage(url: string, selector?: string, opts?: Partial<FetchPageOptions>): Promise<{
+    content: string;
+    title: string;
+    statusCode: number;
+    responseTime: number;
+  }> {
+    const renderMode = opts?.renderMode ?? 'static';
+    const proxy = opts?.proxy ?? (proxyPoolService.size > 0 ? proxyPoolService.getNext() : undefined);
+
+    // Use Playwright for browser mode
+    if (renderMode === 'browser') {
+      const available = await isBrowserAvailable();
+      if (!available) {
+        console.warn('[WebMonitor] Playwright not available, falling back to static mode');
+      } else {
+        try {
+          const result = await browserFetchPage({
+            url,
+            selector,
+            waitForSelector: opts?.waitForSelector,
+            proxy: proxy ?? undefined,
+          });
+          if (proxy) proxyPoolService.reportSuccess(proxy);
+          return result;
+        } catch (error) {
+          if (proxy) proxyPoolService.reportFailure(proxy);
+          throw error;
+        }
+      }
+    }
+
+    // Static mode (default)
+    return this.fetchPageStatic(url, selector, proxy ?? undefined);
+  }
+
+  /**
+   * Static fetch using fetch + cheerio
+   */
+  private async fetchPageStatic(url: string, selector?: string, proxy?: string): Promise<{
     content: string;
     title: string;
     statusCode: number;
@@ -16,14 +64,16 @@ export class WebMonitorService {
     const startTime = Date.now();
     
     try {
-      const response = await fetch(url, {
+      const fetchOpts: RequestInit = {
         headers: {
           'User-Agent': 'WebWatcher/1.0 (https://webwatcher.dev)',
           'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-          'Accept-Language': 'en-US,en;q=0.5',
+          'Accept-Language': 'zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7',
         },
         signal: AbortSignal.timeout(30000),
-      });
+      };
+
+      const response = await fetch(url, fetchOpts);
       
       const responseTime = Date.now() - startTime;
       const html = await response.text();
@@ -43,30 +93,23 @@ export class WebMonitorService {
       let content: string;
       
       if (selector) {
-        // Monitor specific element
         const selected = $(selector);
         content = selected.length > 0 ? selected.text().trim() : '';
       } else {
-        // Monitor main content
         const mainContent = $('main, article, .content, .main, #content, #main').first();
         content = mainContent.length > 0 
           ? mainContent.text().trim()
           : $('body').text().trim();
       }
       
-      // Clean up whitespace: replace multiple spaces/newlines with single space
-      // but keep some structure by replacing multiple newlines with a single newline
       content = content.replace(/[ \t]+/g, ' ').replace(/\n\s*\n/g, '\n').trim();
-      
       const title = $('title').text().trim() || '';
       
-      return {
-        content,
-        title,
-        statusCode: response.status,
-        responseTime,
-      };
+      if (proxy) proxyPoolService.reportSuccess(proxy);
+      
+      return { content, title, statusCode: response.status, responseTime };
     } catch (error) {
+      if (proxy) proxyPoolService.reportFailure(proxy);
       throw new Error(`Failed to fetch page: ${(error as Error).message}`);
     }
   }

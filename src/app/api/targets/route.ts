@@ -20,7 +20,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { url, name, selector, checkInterval, notifyEmail, notifyWebhook } = body;
+    const { url, name, selector, checkInterval, notifyEmail, notifyWebhook, renderMode, waitForSelector, proxy, templateId } = body;
     
     if (!url) {
       return NextResponse.json(
@@ -47,13 +47,21 @@ export async function POST(request: Request) {
       checkInterval: checkInterval || '1hour',
       enabled: true,
       createdAt: new Date().toISOString(),
+      renderMode: renderMode || undefined,
+      waitForSelector: waitForSelector || undefined,
+      proxy: proxy || undefined,
+      templateId: templateId || undefined,
       notifyEmail: notifyEmail || undefined,
       notifyWebhook: notifyWebhook || undefined,
     };
     
     // Take initial snapshot
     try {
-      const pageData = await webMonitorService.fetchPage(url, selector);
+      const pageData = await webMonitorService.fetchPage(url, selector, {
+        renderMode: newTarget.renderMode,
+        waitForSelector: newTarget.waitForSelector,
+        proxy: newTarget.proxy,
+      });
       const snapshot = {
         id: `snap_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         targetId: newTarget.id,

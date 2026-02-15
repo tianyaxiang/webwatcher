@@ -119,7 +119,11 @@ class SchedulerService {
       console.log(`[Scheduler] Checking ${target.name}...`);
       
       // Fetch current page
-      const pageData = await webMonitorService.fetchPage(target.url, target.selector);
+      const pageData = await webMonitorService.fetchPage(target.url, target.selector, {
+        renderMode: target.renderMode,
+        waitForSelector: target.waitForSelector,
+        proxy: target.proxy,
+      });
       
       // Create new snapshot
       const currentSnapshot = {
