@@ -123,6 +123,7 @@ class SchedulerService {
         renderMode: target.renderMode,
         waitForSelector: target.waitForSelector,
         proxy: target.proxy,
+        fetchConfig: target.fetchConfig,
       });
       
       // Create new snapshot

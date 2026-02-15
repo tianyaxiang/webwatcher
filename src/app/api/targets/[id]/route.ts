@@ -99,7 +99,12 @@ export async function POST(
     }
     
     // Fetch current page
-    const pageData = await webMonitorService.fetchPage(target.url, target.selector);
+    const pageData = await webMonitorService.fetchPage(target.url, target.selector, {
+      renderMode: target.renderMode,
+      waitForSelector: target.waitForSelector,
+      proxy: target.proxy,
+      fetchConfig: target.fetchConfig,
+    });
     
     // Create new snapshot
     const currentSnapshot = {

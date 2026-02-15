@@ -9,6 +9,18 @@ interface AddTargetModalProps {
   onAdded: () => void;
 }
 
+/** Parse "Key: Value" lines into a Record */
+function parseHeaders(text: string): Record<string, string> | undefined {
+  const headers: Record<string, string> = {};
+  for (const line of text.split('\n')) {
+    const idx = line.indexOf(':');
+    if (idx > 0) {
+      headers[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
+    }
+  }
+  return Object.keys(headers).length > 0 ? headers : undefined;
+}
+
 export function AddTargetModal({ open, onClose, onAdded }: AddTargetModalProps) {
   const [newUrl, setNewUrl] = useState('');
   const [newName, setNewName] = useState('');
@@ -22,6 +34,11 @@ export function AddTargetModal({ open, onClose, onAdded }: AddTargetModalProps) 
   const [newFeishuUrl, setNewFeishuUrl] = useState('');
   const [newWeComUrl, setNewWeComUrl] = useState('');
   const [newServerChanKey, setNewServerChanKey] = useState('');
+  const [newContentMode, setNewContentMode] = useState<'html' | 'json'>('html');
+  const [newJsonPath, setNewJsonPath] = useState('');
+  const [newCustomHeaders, setNewCustomHeaders] = useState('');
+  const [newCookies, setNewCookies] = useState('');
+  const [newUserAgent, setNewUserAgent] = useState('');
   const [templates, setTemplates] = useState<Record<string, MonitorTemplate[]>>({});
   const [showTemplates, setShowTemplates] = useState(false);
 
@@ -49,6 +66,8 @@ export function AddTargetModal({ open, onClose, onAdded }: AddTargetModalProps) 
     setNewRenderMode('static'); setNewWaitForSelector(''); setNewProxy('');
     setNewEmail(''); setNewWebhook(''); setNewFeishuUrl('');
     setNewWeComUrl(''); setNewServerChanKey('');
+    setNewContentMode('html'); setNewJsonPath(''); setNewCustomHeaders('');
+    setNewCookies(''); setNewUserAgent('');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -70,6 +89,13 @@ export function AddTargetModal({ open, onClose, onAdded }: AddTargetModalProps) 
           notifyFeishu: newFeishuUrl || undefined,
           notifyWeCom: newWeComUrl || undefined,
           notifyServerChan: newServerChanKey || undefined,
+          fetchConfig: (newContentMode !== 'html' || newCustomHeaders || newCookies || newUserAgent || newJsonPath) ? {
+            contentMode: newContentMode !== 'html' ? newContentMode : undefined,
+            jsonPath: newJsonPath || undefined,
+            headers: newCustomHeaders ? parseHeaders(newCustomHeaders) : undefined,
+            cookies: newCookies || undefined,
+            userAgent: newUserAgent || undefined,
+          } : undefined,
         }),
       });
       if (res.ok) {
@@ -184,6 +210,57 @@ export function AddTargetModal({ open, onClose, onAdded }: AddTargetModalProps) 
               <p className="text-xs text-gray-500 mt-1">浏览器渲染后等待此元素出现再抓取</p>
             </div>
           )}
+
+          <div className="border-t pt-4">
+            <h3 className="text-sm font-medium text-gray-900 mb-2">🔧 抓取配置 (可选)</h3>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">内容模式</label>
+                  <select value={newContentMode} onChange={(e) => setNewContentMode(e.target.value as 'html' | 'json')}
+                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
+                    <option value="html">HTML (CSS 选择器)</option>
+                    <option value="json">JSON API (JSONPath)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">User-Agent</label>
+                  <select value={newUserAgent} onChange={(e) => setNewUserAgent(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
+                    <option value="">默认</option>
+                    <option value="chrome">Chrome 浏览器</option>
+                    <option value="firefox">Firefox 浏览器</option>
+                    <option value="safari">Safari 浏览器</option>
+                    <option value="mobile">iPhone Mobile</option>
+                    <option value="googlebot">Googlebot</option>
+                  </select>
+                </div>
+              </div>
+              {newContentMode === 'json' && (
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">JSONPath 表达式</label>
+                  <input type="text" value={newJsonPath} onChange={(e) => setNewJsonPath(e.target.value)}
+                    placeholder="$.data.price 或 $.items[*].title"
+                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 font-mono" />
+                  <p className="text-xs text-gray-400 mt-1">留空则监控完整 JSON 响应</p>
+                </div>
+              )}
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">自定义请求头</label>
+                <textarea value={newCustomHeaders} onChange={(e) => setNewCustomHeaders(e.target.value)}
+                  placeholder={"Authorization: Bearer token123\nX-Custom: value"}
+                  rows={2}
+                  className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 font-mono" />
+                <p className="text-xs text-gray-400 mt-1">每行一个，格式: Header-Name: value</p>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Cookie</label>
+                <input type="text" value={newCookies} onChange={(e) => setNewCookies(e.target.value)}
+                  placeholder="session_id=abc123; token=xyz"
+                  className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 font-mono" />
+              </div>
+            </div>
+          </div>
 
           <div className="border-t pt-4">
             <h3 className="text-sm font-medium text-gray-900 mb-2">高级设置 (可选)</h3>

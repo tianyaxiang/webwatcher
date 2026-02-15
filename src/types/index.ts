@@ -1,8 +1,18 @@
 export type RenderMode = 'static' | 'browser';
+export type ContentMode = 'html' | 'json';    // html=CSS selector, json=JSONPath
 
 export interface ProxyConfig {
   url: string;       // e.g. http://user:pass@host:port or socks5://host:port
   label?: string;    // friendly name
+}
+
+export interface FetchConfig {
+  headers?: Record<string, string>;   // Custom HTTP headers
+  cookies?: string;                    // Cookie string: "key1=val1; key2=val2"
+  userAgent?: string;                  // Custom User-Agent override
+  contentMode?: ContentMode;           // 'html' (default) or 'json'
+  jsonPath?: string;                   // JSONPath expression for json mode (e.g. "$.data.price")
+  timeout?: number;                    // Request timeout in ms (default 30000)
 }
 
 export interface WatchTarget {
@@ -18,6 +28,8 @@ export interface WatchTarget {
   // Render mode
   renderMode?: RenderMode;    // 'static' (default) or 'browser' (Playwright)
   waitForSelector?: string;   // Wait for this selector before capturing (browser mode)
+  // Deep fetch config
+  fetchConfig?: FetchConfig;  // Custom headers, cookies, user-agent, JSON mode
   // Proxy
   proxy?: string;             // proxy URL or pool name
   // Template

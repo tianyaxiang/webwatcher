@@ -20,7 +20,8 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { url, name, selector, checkInterval, notifyEmail, notifyWebhook, renderMode, waitForSelector, proxy, templateId } = body;
+    const { url, name, selector, checkInterval, notifyEmail, notifyWebhook, renderMode, waitForSelector, proxy, templateId, fetchConfig,
+      notifyFeishu, notifyWeCom, notifyServerChan } = body;
     
     if (!url) {
       return NextResponse.json(
@@ -49,10 +50,14 @@ export async function POST(request: Request) {
       createdAt: new Date().toISOString(),
       renderMode: renderMode || undefined,
       waitForSelector: waitForSelector || undefined,
+      fetchConfig: fetchConfig || undefined,
       proxy: proxy || undefined,
       templateId: templateId || undefined,
       notifyEmail: notifyEmail || undefined,
       notifyWebhook: notifyWebhook || undefined,
+      notifyFeishu: notifyFeishu || undefined,
+      notifyWeCom: notifyWeCom || undefined,
+      notifyServerChan: notifyServerChan || undefined,
     };
     
     // Take initial snapshot
@@ -61,6 +66,7 @@ export async function POST(request: Request) {
         renderMode: newTarget.renderMode,
         waitForSelector: newTarget.waitForSelector,
         proxy: newTarget.proxy,
+        fetchConfig: newTarget.fetchConfig,
       });
       const snapshot = {
         id: `snap_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
