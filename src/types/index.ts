@@ -27,6 +27,9 @@ export interface WatchTarget {
   notifyWebhook?: string;
   notifyTelegram?: string;
   notifyDiscord?: string;
+  notifyFeishu?: string;       // 飞书 webhook URL
+  notifyWeCom?: string;        // 企业微信 webhook URL
+  notifyServerChan?: string;   // Server酱 SendKey
 }
 
 export interface MonitorTemplate {

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, RefreshCw, Eye, Trash2, Clock, AlertTriangle, CheckCircle, ExternalLink, Play, Square, Zap, X, ChevronRight, History } from 'lucide-react';
+import { Plus, RefreshCw, Eye, Trash2, Clock, AlertTriangle, CheckCircle, ExternalLink, Play, Square, Zap, X, ChevronRight, History, Download, Bell } from 'lucide-react';
 import type { WatchTarget, ChangeRecord, MonitorStats, SchedulerStatus, MonitorTemplate } from '@/types';
 
 interface SnapshotSummary {
@@ -43,6 +43,9 @@ export default function Home() {
   const [newProxy, setNewProxy] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [newWebhook, setNewWebhook] = useState('');
+  const [newFeishuUrl, setNewFeishuUrl] = useState('');
+  const [newWeComUrl, setNewWeComUrl] = useState('');
+  const [newServerChanKey, setNewServerChanKey] = useState('');
   const [templates, setTemplates] = useState<Record<string, MonitorTemplate[]>>({});
   const [showTemplates, setShowTemplates] = useState(false);
   
@@ -119,8 +122,11 @@ export default function Home() {
           renderMode: newRenderMode !== 'static' ? newRenderMode : undefined,
           waitForSelector: newWaitForSelector || undefined,
           proxy: newProxy || undefined,
-          notifyEmail: newEmail || undefined,
+                    notifyEmail: newEmail || undefined,
           notifyWebhook: newWebhook || undefined,
+          notifyFeishu: newFeishuUrl || undefined,
+          notifyWeCom: newWeComUrl || undefined,
+          notifyServerChan: newServerChanKey || undefined,
         }),
       });
       
@@ -273,6 +279,22 @@ export default function Home() {
                   全部检查
                 </button>
               </div>
+              <a
+                href="/api/export?format=markdown"
+                className="flex items-center gap-2 px-3 py-2 text-sm bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition"
+                title="导出报告"
+                download
+              >
+                <Download className="w-4 h-4" />
+              </a>
+              <a
+                href="/api/export?format=csv"
+                className="flex items-center gap-2 px-3 py-2 text-sm bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition"
+                title="导出CSV"
+                download
+              >
+                CSV
+              </a>
               <button
                 onClick={() => setShowAddForm(true)}
                 className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition"
@@ -792,6 +814,36 @@ export default function Home() {
                       value={newWebhook}
                       onChange={(e) => setNewWebhook(e.target.value)}
                       placeholder="https://api.myapp.com/webhook"
+                      className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">🔵 飞书 Webhook</label>
+                    <input
+                      type="url"
+                      value={newFeishuUrl}
+                      onChange={(e) => setNewFeishuUrl(e.target.value)}
+                      placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/xxx"
+                      className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">🟢 企业微信 Webhook</label>
+                    <input
+                      type="url"
+                      value={newWeComUrl}
+                      onChange={(e) => setNewWeComUrl(e.target.value)}
+                      placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx"
+                      className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">📱 Server酱 Key</label>
+                    <input
+                      type="text"
+                      value={newServerChanKey}
+                      onChange={(e) => setNewServerChanKey(e.target.value)}
+                      placeholder="SCTxxx (sct.ftqq.com)"
                       className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
